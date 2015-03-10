@@ -370,21 +370,6 @@ class MountedRepository(Repository):
         mounted and update the connection's mount_point accordingly.
 
         """
-        # Initially check to see if mounted path exists for the currently
-        # defined mount_point. This will catch situations where different
-        # servers, have the same share name. If the actual mount is
-        # detected further down it will get updated to the correct
-        # 'mount_point' value.
-        count = 1
-        while os.path.ismount(self.connection['mount_point']):
-            self.connection['mount_point'] = "%s-%s" % \
-                (self.connection['mount_point'], count)
-            count += 1
-
-        share_name = urllib.quote(self.connection['share_name'],
-                                  safe='~()*!.\'')
-        URL = self.connection['URL']
-        port = self.connection['port']
 
         mount_check = subprocess.check_output('mount').splitlines()
         # The mount command returns lines like this...
@@ -394,21 +379,28 @@ class MountedRepository(Repository):
         valid_mount_strings = self._get_valid_mount_strings()
 
         for mount in mount_check:
-            if any(match in mount.split(' on ')[0] for match in valid_mount_strings) and self.fs_type in mount.rsplit('(')[-1].split(',')[0]:
+            if any(match in mount.split(' on ')[0] for match in valid_mount_strings) \
+                and self.fs_type in mount.rsplit('(')[-1].split(',')[0]:
 
                 self._was_mounted = True
-                # Get the string between " on " and the "(" symbol, then
-                # strip.
+                # Get the string between " on " and the "(" symbol, then strip.
                 mount_point = mount.split(' on ')[1].split('(')[0].strip()
 
-                # Reset the connection's mount point to the discovered
-                # value.
+                # Set the connection's mount point to the discovered value.
                 if mount_point:
-                    print "%s is already mounted at %s.\n" % (URL, mount_point)
+                    print "%s is already mounted at %s.\n" % (self.connection['URL'], mount_point)
                     self.connection['mount_point'] = mount_point
 
                 # We found the share, no need to continue.
                 break
+
+        if not self._was_mounted:
+            # If the share is not mounted, check for another share mounted to
+            # the same path and if found increment the name to avoid conflicts.
+            count = 1
+            while os.path.ismount(self.connection['mount_point']):
+                self.connection['mount_point'] = "%s-%s" % (self.connection['mount_point'], count)
+                count += 1
 
         # Do an inexpensive double check...
         return os.path.ismount(self.connection['mount_point'])
